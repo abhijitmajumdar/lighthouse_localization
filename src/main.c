@@ -3,7 +3,7 @@
 
 int main()
 {
-  static char *formatted_str = (char*)malloc(128 * sizeof(char));
+  char *formatted_str = (char*)malloc(128 * sizeof(char));
   uint16_t i=0;
   uart_init(115200,0);
   while(1){

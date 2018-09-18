@@ -3,6 +3,10 @@ This repo consists of mainly a Makefile which is oriented to be used to compile 
 
 The compiler arguments are configured towards programming for the STM32F103C8. Why? This chip is commonly available for very low cost on different form of development boards (ex: `bluepill`)(see https://wiki.stm32duino.com/index.php?title=STM32F103_boards), and it is also supported by the Arduino IDE. This project is useful if you do not want to use commercial IDEs (most of which restrict code size) nor the Arduino IDE, and enables compiling and loading custom program onto the microcontroller entirely through the terminal.
 
+## **!!!!**
+This branch assumes a STM32F103 board is connected to a Nano Pi over UART1(A9,A10) on the STM and S1(RX1,TX1) on the NPi. There are also connections between Reset(RST),BOOT0 on STM to 203,363 on NPi respectively. As a result the make file called a separately compiled program to reset the device or put it into bootloading mode.
+
+
 ## Requirements
 - Install compiler (https://developer.arm.com/open-source/gnu-toolchain/gnu-rm)
 ```sh
@@ -18,15 +22,15 @@ search for "STSW-STM32054" and download into this folder
 ```sh
 sudo apt-get install screen
 ```
-- A USB to Serial/TTY/UART adapter (https://www.adafruit.com/product/954, there are several other cheaper options as well)
+- ~~A USB to Serial/TTY/UART adapter (https://www.adafruit.com/product/954, there are several other cheaper options as well)~~
 
 ## Usage:
 ##### Typical Usage
 - Put all source and header files into `src` and `include` directories respectively. Source files can be `C` or `C++` files
-- When using the **Bluepill STM32 board**, connect `A9(TX)` and `A10(RX)` from the board to RX and TX on a **USB to Serial converter** respectively
-- Connect power(+5/+3.3 and Ground) to the STM board to power it up
+- ~~When using the **Bluepill STM32 board**, connect `A9(TX)` and `A10(RX)` from the board to RX and TX on a **USB to Serial converter** respectively~~
+- ~~Connect power(+5/+3.3 and Ground) to the STM board to power it up~~
 - Run ```make``` to compile
-- Set BOOT0 pinto `1` on the STM board and press the reset button
+- ~~Set BOOT0 pinto `1` on the STM board and press the reset button~~
 - Run ```make upload``` to upload to STM board over TTY
 - When using serial, monitor it using ```screen <device> <baud>```
   ex: ```screen /dev/ttyS1 115200```

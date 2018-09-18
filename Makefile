@@ -66,6 +66,7 @@ endif
 # list of source files
 SOURCES_C = $(wildcard $(SOURCE_DIR)/*.c)
 SOURCES_CPP = $(wildcard $(SOURCE_DIR)/*.cpp)
+SOURCES_REBOOT_CONTROLLER = $(wildcard reboot_controller/*.cpp)
 # Listing all library, system, startup and linker files from STM Library
 ifeq ("$(STMLIB)","STM32STD")
 	SYSTEM_FILE = $(STD_PERIPH_LIBS)/Libraries/CMSIS/CM3/DeviceSupport/ST/STM32F10x/system_stm32f10x.c
@@ -100,6 +101,7 @@ AS=arm-none-eabi-as
 OD=arm-none-eabi-objdump
 SE=arm-none-eabi-size
 SF=stm32flash
+RC=$(BUILD_DIR)/reboot_controller
 ifeq ("$(COMPILER)","CC")
 	COMPILER=$(CC)
 else
@@ -183,9 +185,22 @@ clean:
 	@echo "--Cleaning up"
 	@rm -rf build
 
-upload: $(PROJECT).bin
+$(RC): $(SOURCES_REBOOT_CONTROLLER)
+	@echo "--Compiling reboot_controller"
+	@mkdir -p $(@D)
+	@g++ $^ -std=c++11 -o $@
+
+reboot: $(RC)
+	@$(RC)
+
+upload: $(PROJECT).bin $(RC)
+	@echo "--Enabling bootloader"
+	@$(RC) bootload
+	@wait $!
 	@echo "--Uploading to device"
 	@${SF} -w $(BUILD_DIR)/$(PROJECT).bin -v -g 0x00 ${USB_DEVICE}
+	@wait $!
+	@$(RC) noreset
 
 run:
 	@echo "--Sending run command"

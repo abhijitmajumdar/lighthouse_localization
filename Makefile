@@ -130,6 +130,7 @@ ifeq ("$(STMLIB)","STM32CUBE")
 	CFLAGS += -I$(CUBE_LIBS)/Drivers/CMSIS/Device/ST/STM32F1xx/Include
 	CFLAGS += -DSTM32CUBE
 endif
+CFLAGS += -DDELAY_TYPE_NOP
 
 .PHONY: all detail clean upload run
 all: $(PROJECT).elf

@@ -56,7 +56,7 @@ void delay_init(uint32_t resolution)
   delay_initialized = 1;
 }
 
-void delay(uint32_t millis)
+void delay_systick(uint16_t millis)
 {
   if(!delay_initialized) delay_init(10);
   _delay = millis/_delay_resolution;

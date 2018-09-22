@@ -80,3 +80,6 @@ All source files (C,C++) should be placed in `src` folder, or if put in a differ
 This work is largely inspired by others:
 - https://github.com/artem-smotrakov/stm32f103-template.git
 - https://github.com/RuanJG/cotex-m3-project.git
+
+## Changes
+- Two types of delays, one using interrupt based Systick and another uses loops, default delay can be configured using comiler option -DDELAY_TYPE_NOP or -DDELAY_TYPE_SYSTICK

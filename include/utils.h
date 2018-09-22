@@ -22,13 +22,23 @@ void status_led_activity();
 void status_led_set();
 void status_led_reset();
 
-// delay() uses SysTick timer, set to a resolution of 100ms(to have less footprint)
+// delay_systick() uses SysTick timer, set to a resolution of 100ms(to have less footprint)
 // Resolution can be reset using delay_init() in range [1,1000]ms
 // Note: If using delay less than resolution,there is no delay
 // delay_nop() uses loops over NOP instructions
+// The deafult delay type can be defined as either -DDELAY_TYPE_NOP or -DDELAY_TYPE_SYSTICK
+// in the makefile as a comiler flag, either of which can be called using delay()
+
 void delay_init(uint32_t resolution);
-void delay(uint32_t millis);
+void delay_systick(uint16_t millis);
 void delay_nop(uint16_t millis);
+
+#ifdef DELAY_TYPE_NOP
+  #define delay delay_nop
+#endif
+#ifdef DELAY_TYPE_SYSTICK
+  #define delay delay_systick
+#endif
 
 // NVIC system reset
 void system_reset();

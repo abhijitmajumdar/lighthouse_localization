@@ -82,4 +82,15 @@ This work is largely inspired by others:
 - https://github.com/RuanJG/cotex-m3-project.git
 
 ## Changes
+- made init_timer_capture() configurable using a struct
+- added resolution to the capture (when using too high,>4, might need to switch from uint16 to uint32)
+- some methods to display uint,int,binary numbers without stdlib, hence faster
+- added a ootx state to modularize the ootx decode process into bits, need to restructure that
+- ootx has a stopped state to avoid processing it when not needed
+- checked working for timer 2 and 4, on pins PA0 and PB6
+- timer 3 can do pwm capture but is not connected to DMA (TIM3_CH2)
+- timer 1 is not tested, need to change the timer divider and configure to use different RCC
+- lots of debug code, need to clean up
+
+
 - Two types of delays, one using interrupt based Systick and another uses loops, default delay can be configured using comiler option -DDELAY_TYPE_NOP or -DDELAY_TYPE_SYSTICK

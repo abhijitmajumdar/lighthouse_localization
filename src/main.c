@@ -1,78 +1,69 @@
 #include "comm.h"
 #include "utils.h"
 
-void init_exti()
-{
-  EXTI_InitTypeDef   EXTI_InitStructure;
-  GPIO_InitTypeDef   GPIO_InitStructure;
-  NVIC_InitTypeDef   NVIC_InitStructure;
-
-  RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA, ENABLE);
-
-  /* Configure PA.00 pin as input floating */
-  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_11;
-  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IPU;
-  GPIO_Init(GPIOA, &GPIO_InitStructure);
-
-  /* Enable AFIO clock */
-  RCC_APB2PeriphClockCmd(RCC_APB2Periph_AFIO, ENABLE);
-
-  /* Connect EXTI0 Line to PA.00 pin */
-  GPIO_EXTILineConfig(GPIO_PortSourceGPIOA, GPIO_PinSource11);
-
-  /* Configure EXTI0 line */
-  EXTI_InitStructure.EXTI_Line = EXTI_Line11;
-  EXTI_InitStructure.EXTI_Mode = EXTI_Mode_Interrupt;
-  EXTI_InitStructure.EXTI_Trigger = EXTI_Trigger_Rising_Falling;
-  EXTI_InitStructure.EXTI_LineCmd = ENABLE;
-  EXTI_Init(&EXTI_InitStructure);
-
-  /* Enable and set EXTI0 Interrupt to the lowest priority */
-  NVIC_InitStructure.NVIC_IRQChannel = EXTI15_10_IRQn;
-  NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 0x0F;
-  NVIC_InitStructure.NVIC_IRQChannelSubPriority = 0x0F;
-  NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
-  NVIC_Init(&NVIC_InitStructure);
-}
-/*
-void EXTI15_10_IRQHandler(void)
-{
-  if(EXTI_GetITStatus(EXTI_Line11) != RESET)
-  {
-    activity();
-
-    EXTI_ClearITPendingBit(EXTI_Line11);
-  }
-}
-*/
-
-#define BUFF_LEN 4
+#define BUFF_LEN 128
 static uint16_t timer_capture_values_period[BUFF_LEN];
 static uint16_t timer_capture_values_high[BUFF_LEN];
-void init_timer_capture()
+/*
+  Example configuration
+  TIM_PWM_CAPTURE_t configuration = {
+    .nvic_irqchannel = TIM2_IRQn,
+    .dma_ch1 = DMA1_Channel5,
+    .dma_ch2 = DMA1_Channel7,
+    .timx = TIM2,
+    .timx_rcc = RCC_APB1Periph_TIM2,
+    .gpio_rcc = RCC_APB2Periph_GPIOA,
+    .gpio_pin = GPIO_Pin_0,
+    .gpio_port = GPIOA,
+    .resolution = 4,
+    ._center = 4000,
+    ._sync_min = 50,
+    ._sync_max = 150,
+    ._sweep_max = 40
+  };
+*/
+typedef struct TIM_PWM_CAPTURE{
+  uint8_t nvic_irqchannel; //TIM1_IRQn,TIM2_IRQn,TIM3_IRQn,TIM4_IRQn
+  DMA_Channel_TypeDef* dma_ch1; //DMA1_Channel2,DMA1_Channel5,DMA1_Channel6,DMA1_Channel1
+  DMA_Channel_TypeDef* dma_ch2; //DMA1_Channel3,DMA1_Channel7,NULL,DMA1_Channel4
+  TIM_TypeDef* timx; //TIM1,TIM2,TIM3,TIM4
+  uint32_t timx_rcc; // RCC_APB1Periph_TIM2/3/4,RCC_APB2Periph_TIM1
+  uint32_t gpio_rcc; //RCC_APB2Periph_GPIOA,RCC_APB2Periph_GPIOB
+  uint16_t gpio_pin; // GPIO_Pin_x
+  GPIO_TypeDef* gpio_port; //GPIOA,GPIOB
+  uint8_t resolution; // Divisor of 1uS
+  int16_t _center; // 4000uS
+  int16_t _sync_min; // 50uS
+  int16_t _sync_max; // 150uS
+  int16_t _sweep_max; // 40uS
+} TIM_PWM_CAPTURE_t;
+
+void init_timer_capture(TIM_PWM_CAPTURE_t &config)
 {
   NVIC_InitTypeDef NVIC_InitStructure;
   GPIO_InitTypeDef GPIO_InitStructure;
   TIM_ICInitTypeDef  TIM_ICInitStructure;
   DMA_InitTypeDef DMA_InitStructure;
 
-  NVIC_InitStructure.NVIC_IRQChannel = TIM2_IRQn;
+  NVIC_InitStructure.NVIC_IRQChannel = config.nvic_irqchannel;
   NVIC_InitStructure.NVIC_IRQChannelPreemptionPriority = 0;
   NVIC_InitStructure.NVIC_IRQChannelSubPriority = 1;
   NVIC_InitStructure.NVIC_IRQChannelCmd = ENABLE;
   NVIC_Init(&NVIC_InitStructure);
 
-  RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA, ENABLE);
+  RCC_APB2PeriphClockCmd(config.gpio_rcc, ENABLE);
+  // RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOB | RCC_APB2Periph_AFIO, ENABLE);
+  // GPIO_PinRemapConfig()
   GPIO_StructInit(&GPIO_InitStructure);
-  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_0;
+  GPIO_InitStructure.GPIO_Pin = config.gpio_pin;
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN_FLOATING;
   GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
-  GPIO_Init(GPIOA, &GPIO_InitStructure);
+  GPIO_Init(config.gpio_port, &GPIO_InitStructure);
 
   RCC_AHBPeriphClockCmd(RCC_AHBPeriph_DMA1, ENABLE);
-  DMA_DeInit(DMA1_Channel5);
-  DMA_DeInit(DMA1_Channel7);
-  DMA_InitStructure.DMA_PeripheralBaseAddr = (uint32_t)&(TIM2->CCR1);
+  DMA_DeInit(config.dma_ch1);
+  DMA_DeInit(config.dma_ch2);
+  DMA_InitStructure.DMA_PeripheralBaseAddr = (uint32_t)&(config.timx->CCR1);
   DMA_InitStructure.DMA_MemoryBaseAddr = (uint32_t)timer_capture_values_period;
   DMA_InitStructure.DMA_DIR = DMA_DIR_PeripheralSRC;
   DMA_InitStructure.DMA_BufferSize = BUFF_LEN;
@@ -83,8 +74,8 @@ void init_timer_capture()
   DMA_InitStructure.DMA_Mode = DMA_Mode_Circular;
   DMA_InitStructure.DMA_Priority = DMA_Priority_High;
   DMA_InitStructure.DMA_M2M = DMA_M2M_Disable;
-  DMA_Init(DMA1_Channel5, &DMA_InitStructure);
-  DMA_InitStructure.DMA_PeripheralBaseAddr = (uint32_t)&(TIM2->CCR2);
+  DMA_Init(config.dma_ch1, &DMA_InitStructure);
+  DMA_InitStructure.DMA_PeripheralBaseAddr = (uint32_t)&(config.timx->CCR2);
   DMA_InitStructure.DMA_MemoryBaseAddr = (uint32_t)timer_capture_values_high;
   DMA_InitStructure.DMA_DIR = DMA_DIR_PeripheralSRC;
   DMA_InitStructure.DMA_BufferSize = BUFF_LEN;
@@ -95,193 +86,262 @@ void init_timer_capture()
   DMA_InitStructure.DMA_Mode = DMA_Mode_Circular;
   DMA_InitStructure.DMA_Priority = DMA_Priority_High;
   DMA_InitStructure.DMA_M2M = DMA_M2M_Disable;
-  DMA_Init(DMA1_Channel7, &DMA_InitStructure);
+  DMA_Init(config.dma_ch2, &DMA_InitStructure);
 
-  DMA_Cmd(DMA1_Channel5, ENABLE);
-  DMA_Cmd(DMA1_Channel7, ENABLE);
+  DMA_Cmd(config.dma_ch1, ENABLE);
+  DMA_Cmd(config.dma_ch2, ENABLE);
 
-  RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM2, ENABLE);
-  TIM_PrescalerConfig(TIM2, 71, TIM_PSCReloadMode_Immediate);
+  RCC_APB1PeriphClockCmd(config.timx_rcc, ENABLE);
+  TIM_PrescalerConfig(config.timx, (72/config.resolution)-1, TIM_PSCReloadMode_Immediate); //71
   TIM_ICInitStructure.TIM_Channel = TIM_Channel_1;
   TIM_ICInitStructure.TIM_ICPolarity = TIM_ICPolarity_Falling;
   TIM_ICInitStructure.TIM_ICSelection = TIM_ICSelection_DirectTI;
   TIM_ICInitStructure.TIM_ICPrescaler = TIM_ICPSC_DIV1;
   TIM_ICInitStructure.TIM_ICFilter = 0x0;
   //TIM_ICInit(TIM2, &TIM_ICInitStructure);
-  TIM_PWMIConfig(TIM2, &TIM_ICInitStructure);
-  TIM_SelectInputTrigger(TIM2, TIM_TS_TI1FP1);
-  TIM_SelectSlaveMode(TIM2, TIM_SlaveMode_Reset);
-  TIM_SelectMasterSlaveMode(TIM2, TIM_MasterSlaveMode_Enable);
+  TIM_PWMIConfig(config.timx, &TIM_ICInitStructure);
+  TIM_SelectInputTrigger(config.timx, TIM_TS_TI1FP1);
+  TIM_SelectSlaveMode(config.timx, TIM_SlaveMode_Reset);
+  TIM_SelectMasterSlaveMode(config.timx, TIM_MasterSlaveMode_Enable);
 
-  TIM_DMACmd(TIM2, TIM_DMA_CC1, ENABLE);
-  TIM_DMACmd(TIM2, TIM_DMA_CC2, ENABLE);
+  TIM_DMACmd(config.timx, TIM_DMA_CC1, ENABLE);
+  TIM_DMACmd(config.timx, TIM_DMA_CC2, ENABLE);
 
-  TIM_Cmd(TIM2, ENABLE);
+  TIM_Cmd(config.timx, ENABLE);
 
-  // TIM_ITConfig(TIM2, TIM_IT_CC1, ENABLE);
-  // TIM_ITConfig(TIM2, TIM_IT_CC2, ENABLE);
+  // TIM_ITConfig(config.timx, TIM_IT_CC1, ENABLE);
+  // TIM_ITConfig(config.timx, TIM_IT_CC2, ENABLE);
+
+  config._center *= config.resolution;
+  config._sync_min *= config.resolution;
+  config._sync_max *= config.resolution;
+  config._sweep_max *= config.resolution;
 }
 
-// static uint16_t ph = 0;
-// static uint16_t pl = 0;
-// static uint16_t pt = 0;
-/*
-void TIM2_IRQHandler(void)
+
+void uart_send_uint(uint16_t val)
 {
-  TIM_ClearITPendingBit(TIM2, TIM_IT_CC1);
-  uint16_t val = TIM_GetCapture1(TIM2);
-  if (val){
-    ph = TIM_GetCapture2(TIM2);
-    pl = val - ph;
+  if(val>=10){
+    uart_send_uint(val/10);
+    val = val%10;
   }
-  activity();
-}
-*/
-/*
-void TIM2_IRQHandler(void)
-{
-  if(TIM_GetITStatus(TIM2, TIM_IT_CC2) == SET){
-    TIM_ClearITPendingBit(TIM2, TIM_IT_CC2);
-    ph = TIM_GetCapture2(TIM2);
-  }
-  if(TIM_GetITStatus(TIM2, TIM_IT_CC1) == SET){
-    TIM_ClearITPendingBit(TIM2, TIM_IT_CC1);
-    pt = TIM_GetCapture1(TIM2);
-  }
-  activity();
-}
-*/
-
-void init_dummy_pwm(uint32_t frequency)
-{
-  uint16_t overflow_value = 1000000/frequency;
-  TIM_TimeBaseInitTypeDef  TIM_TimeBaseStructure;
-  TIM_OCInitTypeDef  TIM_OCInitStructure;
-  GPIO_InitTypeDef GPIO_InitStructure;
-  RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOA | RCC_APB2Periph_AFIO, ENABLE);
-  RCC_APB1PeriphClockCmd(RCC_APB1Periph_TIM3, ENABLE);
-  GPIO_InitStructure.GPIO_Pin = GPIO_Pin_6;
-  GPIO_InitStructure.GPIO_Mode = GPIO_Mode_AF_PP;
-  GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
-  GPIO_Init(GPIOA, &GPIO_InitStructure);
-  TIM_TimeBaseStructure.TIM_Period = overflow_value;
-  TIM_TimeBaseStructure.TIM_Prescaler = 71;
-  TIM_TimeBaseStructure.TIM_ClockDivision = 0;
-  TIM_TimeBaseStructure.TIM_CounterMode = TIM_CounterMode_Up;
-  TIM_TimeBaseInit(TIM3, &TIM_TimeBaseStructure);
-  TIM_OCInitStructure.TIM_OCMode = TIM_OCMode_PWM2;
-  TIM_OCInitStructure.TIM_OutputState = TIM_OutputState_Enable;
-  TIM_OCInitStructure.TIM_Pulse = overflow_value/2;
-  TIM_OCInitStructure.TIM_OCPolarity = TIM_OCPolarity_Low;
-  TIM_OC1Init(TIM3, &TIM_OCInitStructure);
-  TIM_OC1PreloadConfig(TIM3, TIM_OCPreload_Enable);
-  TIM_ARRPreloadConfig(TIM3, ENABLE);
-  TIM_Cmd(TIM3, ENABLE);
+  uart_send('0'+val);
 }
 
-/*
-static int some_global_indexer = 0;
-static int buffer[4];
-void INPUT_CAPTURE_BOTH_EDGE_CH_ISR(void)
+void uart_send_int(int16_t val)
 {
-  val = capture_value();
-  if (60 uS < val < 140 uS){
-    some_global_indexer = 0;
+  if(val<0){
+    uart_send('-');
+    val = -val;
   }
-  if (some_global_indexer>3){
-    no_signal();
-    return;
-  }
-  buffer[some_global_indexer++] = val;
+  uart_send_uint(val);
 }
-*/
+
+void uart_send_binary(uint16_t val)
+{
+  if(val>=2){
+    uart_send_binary(val/2);
+    val = val%2;
+  }
+  uart_send('0'+val);
+}
+
+void uart_send_binary_complete(uint16_t val)
+{
+  for(int _l=0;_l<16;_l++){
+    uint16_t v = val & (1<<(16-_l));
+    uart_send('0'+((v==0)?0:1));
+  }
+}
+
+typedef enum OOTX_STATE{
+  STOPPED=0,
+  INITALIZED,
+  WAIT_FOR_FRAME,
+  CHECK_FRAME,
+  PROCESS_FRAME
+} OOTX_STATE_t;
+#define OOTX_BUF_LEN 64
 
 int main()
 {
   char *formatted_str = (char*)malloc(128 * sizeof(char));
   uint16_t i=0;
-  uint32_t freq = 120;
-  uint16_t period = 8333;
-  uint16_t duty = 62;
-  uint16_t jump = 1;
   uint16_t *tc_h = timer_capture_values_high;
   uint16_t *tc_p = timer_capture_values_period;
-  float x,y;
-  uart_init(115200,0);
-  // init_exti();
-  // init_dummy_pwm(freq);
-  init_timer_capture();
-  while(1){
-    i++;
-    // sprintf(formatted_str, "----<%d::d=%d,p=%d,j=%d:\t%d,%d,%d>----\r",i,duty,period,jump,ph,pl,pt);
-    // uint16_t h1,l1,h2,l2,h3,l3,h4,l4;
-    // h1 = tc_h[0]+1;
-    // l1 = tc_p[0]-h1;
-    // h2 = tc_h[1]+1;
-    // l2 = tc_p[1]-h2;
-    // h3 = tc_h[2]+1;
-    // l3 = tc_p[2]-h1;
-    // h4 = tc_h[3]+1;
-    // l4 = tc_p[3]-h2;
-    // sprintf(formatted_str, "----<%d::d=%d,p=%d,j=%d:\t__/\t%d\t\\__%d__/\t%d\t\\__%d>----\r",i,duty,period,jump,h1,l1,h2,l2);
-    // sprintf(formatted_str, "----<%d::d=%d,p=%d,j=%d:__/%d\\__%d__/%d\\__%d__/%d\\__%d__/%d\\__%d>----\r",i,duty,period,jump,h1,l1,h2,l2,h3,l3,h4,l4);
+  int16_t x,y;
+  int16_t buf_idx=0;
+  int16_t idx_h,idx_p;
 
-    for (uint8_t idx=0;idx<BUFF_LEN-1;idx++) { // For all records in buffer
-      if (tc_h[idx]<150 & tc_h[idx]>50) { // If valid sync pulse is found
-        uint16_t sync_pulse_code = int((0.096*tc_h[idx])-5); // Decode the sync pulse
-        if (tc_h[idx+1]<40){ // If valid position is found after the sync pulse
-          float pos = (4000-tc_p[idx])/90.0; // Relative angle from center (4000uS)
-          if (pos<90 & pos>-90){ // Double check if position is within range
+  OOTX_STATE_t state=INITALIZED;
+  uint16_t ootx_buf[OOTX_BUF_LEN];
+  uint8_t ootx_buf_index = 0;
+  uint8_t bit_counter = 0;
+  uint32_t preamble = 0xffffffff;
+  uint8_t preamble_received = 0;
+  uint8_t _debug=0;
+
+  uart_init(115200,0);
+  delay(1000);
+  TIM_PWM_CAPTURE_t configuration = {
+    .nvic_irqchannel = TIM4_IRQn,
+    .dma_ch1 = DMA1_Channel1,
+    .dma_ch2 = DMA1_Channel4,
+    .timx = TIM4,
+    .timx_rcc = RCC_APB1Periph_TIM4,
+    .gpio_rcc = RCC_APB2Periph_GPIOB,
+    .gpio_pin = GPIO_Pin_6,
+    .gpio_port = GPIOB,
+    .resolution = 4,
+    ._center = 4000,
+    ._sync_min = 50,
+    ._sync_max = 150,
+    ._sweep_max = 40
+  };
+  init_timer_capture(configuration);
+  while(1){
+    idx_p = BUFF_LEN-DMA_GetCurrDataCounter(configuration.dma_ch1)-buf_idx;
+    idx_p = idx_p>=0?idx_p:BUFF_LEN+idx_p;
+    idx_h = BUFF_LEN-DMA_GetCurrDataCounter(configuration.dma_ch2)-buf_idx;
+    idx_h = idx_h>=0?idx_h:BUFF_LEN+idx_h;
+    if (idx_h>1 & idx_p>1){
+      status_led_activity();
+      int16_t next_idx = buf_idx+1;
+      if (next_idx==BUFF_LEN) next_idx=0;
+      if (tc_h[buf_idx]<configuration._sync_max & tc_h[buf_idx]>configuration._sync_min) { // If valid sync pulse is found
+        // 500 tics = 48uS
+        // 1 uS = 500/48 tics
+        // uint16_t sync_pulse_code = int((0.096*tc_h[buf_idx])-5); // Decode the sync pulse
+        uint16_t sync_pulse_code = int((((48/configuration.resolution)*tc_h[buf_idx])-2750)/500); // Decode the sync pulse
+
+        // Process position
+        if (tc_h[next_idx]<configuration._sweep_max){ // If valid position is found after the sync pulse
+          int16_t pos = configuration._center-tc_p[buf_idx]; // Relative angle from center (4000uS)
+          if (pos<configuration._center & pos>-configuration._center){ // Double check if position is within range
             if (sync_pulse_code%2==0){ // This was a X sweep
               x = pos;
             }
             else{  // This was a Y sweep
               y = pos;
             }
+            i++;
           }
-          idx++;
+          buf_idx = next_idx+1; // Processed a sync and a sweep pulse
+        }
+        else{
+          buf_idx = next_idx; // Processed a sync pulse only
+        }
+        if (buf_idx==BUFF_LEN) buf_idx=0;
+
+
+        // Process sync data
+        sync_pulse_code = (sync_pulse_code&0x0002)>>1;
+        // Lookout for preamble
+        // When found change updating buffer to avoid overwrite and change state
+        preamble <<= 1;
+        preamble |= sync_pulse_code;
+        if ((preamble & 0x0003ffff) == 0x00000001){
+          preamble_received = 1;
+        }
+        switch (state) {
+          case STOPPED:
+            // Do nothing, save time by not processing OOTX frame
+            break;
+          case INITALIZED:
+            if(preamble_received){
+              ootx_buf_index = 0;
+              bit_counter = 0;
+              preamble_received = 0;
+              state = WAIT_FOR_FRAME;
+            }
+            break;
+          case WAIT_FOR_FRAME:
+            // Push bits into the ootx buffer
+            if(preamble_received){
+              preamble_received = 0;
+              state = CHECK_FRAME;
+            }
+            else if(bit_counter<16){
+              ootx_buf[ootx_buf_index] = (ootx_buf[ootx_buf_index]<<1)|sync_pulse_code;
+              bit_counter++;
+            }
+            else{
+              bit_counter = 0;
+              ootx_buf_index++;
+              if(sync_pulse_code==0){ //Wrong sync bit
+                if((preamble & 0x0001ffff)!=0){ // Wrong only if its not preamble being received
+                  state = INITALIZED;
+                  uart_sends("Error: Sync bit\r\n");
+                }
+              }
+              if (ootx_buf_index==OOTX_BUF_LEN){ // Overflow
+                state = INITALIZED;
+                uart_sends("Error: Buffer overflow\r\n");
+              }
+            }
+            break;
+          case CHECK_FRAME:
+            // Check payload length matchup
+            // Check CRC
+            state = PROCESS_FRAME;
+            break;
+          case PROCESS_FRAME:
+            state = INITALIZED;
+            uint16_t cm = ootx_buf[16]&0xff;
+            uart_send_binary(cm);
+            // uart_send_uint(ootx_buf_index);
+            uart_sends("\r\nProcessing frame\r\n");
+            _debug=1;
+            break;
         }
       }
-      sprintf(formatted_str, "----<%d::x=%f,y=%f>----\r",i,x,y);
-      // uart_clear_line(64);
-      uart_sends(formatted_str);
-      delay(50);
-    }
-    if(available()){
-      while(available()){
-        switch(uart_getc()){
-          case 'r':
-            uart_sends("Resetting...");
-            uart_deinit();
-            NVIC_SystemReset();
-            break;
-          case 'w':
-            duty += jump;
-            TIM_SetCompare1(TIM3,duty);
-            break;
-          case 's':
-            duty -= jump;
-            TIM_SetCompare1(TIM3,duty);
-            break;
-          case 'i':
-            period += jump;
-            TIM_SetAutoreload(TIM3,period);
-            break;
-          case 'j':
-            period -= jump;
-            TIM_SetAutoreload(TIM3,period);
-            break;
-          case 'd':
-            jump += 1;
-            break;
-          case 'a':
-            jump -= 1;
-            break;
-          default:
-            uart_sends("\r\n!!!!!!!!......INVALID INPUT......!!!!!!!!\r\n");
-        }
+      else{
+        // If not a valid sync pulse, skip to next
+        buf_idx = next_idx;
       }
+      // status_led_reset();
     }
-    // delay(100);
+    if (_debug){
+      // for(int _l=0;_l<OOTX_BUF_LEN;_l++){
+      //   uart_send_binary_complete(ootx_buf[_l]);
+      // }
+      for(int _l=0;_l<ootx_buf_index;_l++){
+        uart_send_uint(ootx_buf[_l]);
+        uart_send(',');
+      }
+      uart_sends("\r\n\n\n");
+      _debug=0;
+    }
+    if(i%100==0){
+      // uart_sends("\r                        \r");
+      // uart_send('\r');
+      // uart_send_int(buf_idx);
+      // uart_send(',');
+      // uart_send_int(idx_p);
+      // uart_send(',');
+      uart_sends(">");
+      // uart_send_binary(preamble);
+      // uart_sends("\r\n");
+      uart_send(':');
+      uart_send_int(x);
+      uart_send(',');
+      uart_send_int(y);
+      // uart_sends("\r                        \r");
+      // uart_send_binary(x);
+      // uart_sends("\r                        \r");
+      // uart_send_int(int(preamble_counter));
+      // uart_sends("\r                        \r");
+      // uart_send_binary(ootx_buf[ootx_buf_index]);
+      // status_led_activity();
+      // for(int _l=0;_l<OOTX_BUF_LEN;_l++){
+      //   uart_send_binary_complete(ootx_buf[_l]);
+      // }
+      // uart_sends("\r\n\n\n");
+      // uart_send_binary_complete(i);
+      // uart_send_uint(i);
+      uart_sends("\r\n");
+      i++;
+    }
+    delay(1);
   }
 }

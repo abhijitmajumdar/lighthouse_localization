@@ -13,8 +13,8 @@ void status_led_init()
   GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_Out_PP;
   GPIO_Init(GPIOC, &GPIO_InitStructure);
-  status_led_reset();
   status_led_initialized = 1;
+  GPIOC->BSRR = GPIO_BSRR_BS13; // Reset
 }
 
 void status_led_activity()

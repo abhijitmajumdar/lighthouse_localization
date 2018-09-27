@@ -82,6 +82,13 @@ This work is largely inspired by others:
 - https://github.com/RuanJG/cotex-m3-project.git
 
 ## Changes
+- fixed led init method which called reset and entered an infinite loop of methods
+- modularized methods to check and process x/y data for each timer and method to process ootx frame
+- struct definitions of compare capture(and x,y values) and ootx data
+- fixed timer 1 issue with correct RCC initialization
+- ootx processing can be disabled by setting corresponding state
+- ootx decode takes one timer to process frame
+- tested with timer 1,2,4, all working simultaneously, with individual buffers
 - made init_timer_capture() configurable using a struct
 - added resolution to the capture (when using too high,>4, might need to switch from uint16 to uint32)
 - some methods to display uint,int,binary numbers without stdlib, hence faster

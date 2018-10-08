@@ -82,6 +82,10 @@ This work is largely inspired by others:
 - https://github.com/RuanJG/cotex-m3-project.git
 
 ## Changes
+- added a rule in Makefile to upload only without resetting (useful when uploading using a laptop and resetting the STM manually)
+- actually format and proccess the OOTX data now(though not really used in the solver, but available)
+- serial update is performed only when `#` is received, helps sync the processing on the processor end
+- fixed binary uart method which missed the first bit
 - fixed led init method which called reset and entered an infinite loop of methods
 - modularized methods to check and process x/y data for each timer and method to process ootx frame
 - struct definitions of compare capture(and x,y values) and ootx data

@@ -32,7 +32,7 @@ void uart_send_binary(uint16_t val)
 
 void uart_send_binary_complete(uint16_t val)
 {
-  for(int _l=0;_l<16;_l++){
+  for(int _l=1;_l<=16;_l++){
     uint16_t v = val & (1<<(16-_l));
     uart_send('0'+((v==0)?0:1));
   }
@@ -209,8 +209,20 @@ typedef struct OOTX_DATA{
   uint8_t bit_counter;
   uint8_t preamble_received;
   uint32_t preamble;
+  int8_t ax;
+  int8_t ay;
+  int8_t az;
+  uint8_t valid;
   uint16_t buf[OOTX_BUF_LEN];
 } OOTX_DATA_t;
+
+void format_ootx_data(OOTX_DATA_t &ootx)
+{
+  ootx.ax = (int8_t)((ootx.buf[1+(20/2)]>>8)&0xff);
+  ootx.ay = (int8_t)((ootx.buf[1+(21/2)])&0xff);
+  ootx.az = (int8_t)((ootx.buf[1+(22/2)]>>8)&0xff);
+  ootx.valid = 1;
+}
 
 void process_ootx_frame(OOTX_DATA_t &ootx, TIM_PWM_CAPTURE_t &data)
 {
@@ -270,21 +282,44 @@ void process_ootx_frame(OOTX_DATA_t &ootx, TIM_PWM_CAPTURE_t &data)
       break;
     case PROCESS_FRAME:
       ootx.state = INITALIZED;
-      // uint16_t cm = ootx.buf[16]&0xff;
-      // uart_send_binary(cm);
-      // uart_send_uint(ootx.buf_index);
-      // uart_sends("\r\nProcessing frame\r\n");
-      // _debug=1;
+      format_ootx_data(ootx);
       break;
   }
   data.sync_pulse_code=0xF;
+}
+
+void transmit(uint16_t x1,uint16_t y1,uint16_t x2,uint16_t y2,uint16_t x3,uint16_t y3)
+{
+  const char buf[] = {
+    '>',
+    (uint8_t) ((x1>>8) & 0xff),
+    (uint8_t) (x1 & 0xff),
+    (uint8_t) ((y1>>8) & 0xff),
+    (uint8_t) (y1 & 0xff),
+    (uint8_t) ((x2>>8) & 0xff),
+    (uint8_t) (x2 & 0xff),
+    (uint8_t) ((y2>>8) & 0xff),
+    (uint8_t) (y2 & 0xff),
+    (uint8_t) ((x3>>8) & 0xff),
+    (uint8_t) (x3 & 0xff),
+    (uint8_t) ((y3>>8) & 0xff),
+    (uint8_t) (y3 & 0xff),
+    '\r',
+    '\n'
+  };
+  int buflen = sizeof(buf);
+  int i=0;
+  while(i<buflen){
+    uart_send(buf[i++]);
+  }
 }
 
 int main()
 {
   char *formatted_str = (char*)malloc(128 * sizeof(char));
   uint16_t i=0;
-  uint8_t _debug=1;
+  uint8_t _debug=0;
+  uint8_t _serial_update=1;
 
   uart_init(115200,0);
   status_led_reset();
@@ -365,39 +400,65 @@ int main()
     process_sensor_data(configuration_sensor_2);
     process_sensor_data(configuration_sensor_3);
     process_ootx_frame(ootx_data,configuration_sensor_1);
+    if(available()){
+      if(uart_getc()=='#'){
+        transmit(
+          configuration_sensor_1.x,
+          configuration_sensor_1.y,
+          configuration_sensor_2.x,
+          configuration_sensor_2.y,
+          configuration_sensor_3.x,
+          configuration_sensor_3.y
+        );
+      }
+    }
+    else{
+      // delay(1);
+    }
     status_led_reset();
 
-    if (_debug & ootx_data.state==PROCESS_FRAME){
-      // for(int _l=0;_l<OOTX_BUF_LEN;_l++){
-      //   uart_send_binary_complete(ootx_data.buf[_l]);
-      // }
-      for(int _l=0;_l<ootx_data.buf_index;_l++){
-        uart_send_uint(ootx_data.buf[_l]);
-        uart_send(',');
-      }
-      uart_sends("\r\n\n\n");
+
+
+    /*  _DEBUG stuff */
+    if(_debug & ootx_data.valid){
+      uart_send('#');
+      uart_send_int(ootx_data.ax);
+      uart_send(',');
+      uart_send_int(ootx_data.ay);
+      uart_send(',');
+      uart_send_int(ootx_data.az);
+      uart_sends("\r\n");
+      ootx_data.valid = 0;
     }
 
-    if(i%100==0){
-      uart_send('>');
-      uart_send('(');
-      uart_send_int(configuration_sensor_1.x);
-      uart_send(',');
-      uart_send_int(configuration_sensor_1.y);
-      uart_send(')');
-      uart_send('(');
-      uart_send_int(configuration_sensor_2.x);
-      uart_send(',');
-      uart_send_int(configuration_sensor_2.y);
-      uart_send(')');
-      uart_send('(');
-      uart_send_int(configuration_sensor_3.x);
-      uart_send(',');
-      uart_send_int(configuration_sensor_3.y);
-      uart_send(')');
-      uart_sends("\r\n");
+    if (_debug & ootx_data.state==PROCESS_FRAME){
+      for(int _l=0;_l<ootx_data.buf_index;_l++){
+        // ootx_data.buf[_l] = ((ootx_data.buf[_l]<<8)&0xff00)|((ootx_data.buf[_l]>>8)&0x00ff);
+        uart_send_uint(_l);
+        uart_sends(":\t");
+        uart_send_binary_complete(ootx_data.buf[_l]);
+        uart_send('\t');
+        uart_send_uint(ootx_data.buf[_l]);
+        uart_sends("\r\n");
+        // uart_send_uint(ootx_data.buf[_l]);
+        // uart_send(',');
+      }
+      uint16_t tilt1 = ((ootx_data.buf[5+1]<<8)&0xff00)|((ootx_data.buf[5+1]>>8)&0x00ff);
+      // uint16_t data_len = ((ootx_data.buf[0]<<8)&0xff00)|((ootx_data.buf[0]>>8)&0x00ff);
+      // uint16_t protocol = (ootx_data.buf[1]>>8)&0x3f;
+      // uint8_t ax = (ootx_data.buf[1+(20/2)]>>8)&0xff;
+      // uint8_t ay = (ootx_data.buf[1+(21/2)])&0xff;
+      // uint8_t az = (ootx_data.buf[1+(22/2)]>>8)&0xff;
+      // int16_t _ax = (int8_t)((ootx_data.buf[1+(20/2)]>>8)&0xff);
+      // int16_t _ay = (int8_t)((ootx_data.buf[1+(21/2)])&0xff);
+      // int16_t _az = (int8_t)((ootx_data.buf[1+(22/2)]>>8)&0xff);
+      // uart_send_int(_ax);
+      // uart_send('\t');
+      // uart_send_int(_ay);
+      // uart_send('\t');
+      // uart_send_int(_az);
+      // uart_sends("\r\n\n\n");
     }
     i++;
-    delay(1);
   }
 }

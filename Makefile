@@ -203,6 +203,11 @@ upload: $(PROJECT).bin $(RC)
 	@wait $!
 	@$(RC) noreset
 
+upload_only: $(PROJECT).bin
+	@echo "--The device is assumed to be in bootloader mode"
+	@echo "--Uploading to device"
+	@${SF} -w $(BUILD_DIR)/$(PROJECT).bin -v -g 0x00 ${USB_DEVICE}
+
 run:
 	@echo "--Sending run command"
 	@${SF} -g 0x00 ${USB_DEVICE}

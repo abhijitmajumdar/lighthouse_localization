@@ -40,12 +40,18 @@ void uart_send_binary_complete(uint16_t val)
 //
 
 #define BUFF_LEN 32
-static uint16_t timer_capture_values_period[BUFF_LEN];
-static uint16_t timer_capture_values_high[BUFF_LEN];
-static uint16_t timer_capture_values_period_2[BUFF_LEN];
-static uint16_t timer_capture_values_high_2[BUFF_LEN];
-static uint16_t timer_capture_values_period_3[BUFF_LEN];
-static uint16_t timer_capture_values_high_3[BUFF_LEN];
+static uint16_t timer1_capture_values_period[BUFF_LEN];
+static uint16_t timer1_capture_values_high[BUFF_LEN];
+static uint16_t timer2_capture_values_period[BUFF_LEN];
+static uint16_t timer2_capture_values_high[BUFF_LEN];
+static uint16_t timer3_capture_values_period[BUFF_LEN];
+static uint16_t timer3_capture_values_high[BUFF_LEN];
+static uint16_t timer4_capture_values_period[BUFF_LEN];
+static uint16_t timer4_capture_values_high[BUFF_LEN];
+static uint16_t timer_1_buf_idx;
+static uint16_t timer_2_buf_idx;
+static uint16_t timer_3_buf_idx;
+static uint16_t timer_4_buf_idx;
 
 typedef struct TIM_PWM_CAPTURE{
   uint8_t nvic_irqchannel; //TIM1_IRQn,TIM2_IRQn,TIM3_IRQn,TIM4_IRQn
@@ -64,6 +70,7 @@ typedef struct TIM_PWM_CAPTURE{
   uint16_t *p_vp; // Pointer to store period from CH1
   uint16_t *h_vp; // Pointer to store high from CH2
   int16_t buf_idx; // index to current processed position in the buffer
+  uint16_t *buf_update_idx_ptr; // index to current saved data in the buffer, set to -1 if not used
   int16_t x; // Derived x-angle measure from center
   int16_t y; // Derived y-angle measure from center
   uint16_t sync_pulse_code; // The decoded sync pulse value of current pulse
@@ -83,44 +90,45 @@ void init_timer_capture(TIM_PWM_CAPTURE_t &config)
   NVIC_Init(&NVIC_InitStructure);
 
   RCC_APB2PeriphClockCmd(config.gpio_rcc, ENABLE);
-  // RCC_APB2PeriphClockCmd(RCC_APB2Periph_GPIOB | RCC_APB2Periph_AFIO, ENABLE);
-  // GPIO_PinRemapConfig()
   GPIO_StructInit(&GPIO_InitStructure);
   GPIO_InitStructure.GPIO_Pin = config.gpio_pin;
   GPIO_InitStructure.GPIO_Mode = GPIO_Mode_IN_FLOATING;
   GPIO_InitStructure.GPIO_Speed = GPIO_Speed_50MHz;
   GPIO_Init(config.gpio_port, &GPIO_InitStructure);
 
-  RCC_AHBPeriphClockCmd(RCC_AHBPeriph_DMA1, ENABLE);
-  DMA_DeInit(config.dma_ch1);
-  DMA_DeInit(config.dma_ch2);
-  DMA_InitStructure.DMA_PeripheralBaseAddr = (uint32_t)&(config.timx->CCR1);
-  DMA_InitStructure.DMA_MemoryBaseAddr = (uint32_t)config.p_vp;
-  DMA_InitStructure.DMA_DIR = DMA_DIR_PeripheralSRC;
-  DMA_InitStructure.DMA_BufferSize = BUFF_LEN;
-  DMA_InitStructure.DMA_PeripheralInc = DMA_PeripheralInc_Disable;
-  DMA_InitStructure.DMA_MemoryInc = DMA_MemoryInc_Enable;
-  DMA_InitStructure.DMA_PeripheralDataSize = DMA_PeripheralDataSize_HalfWord;
-  DMA_InitStructure.DMA_MemoryDataSize = DMA_MemoryDataSize_HalfWord;
-  DMA_InitStructure.DMA_Mode = DMA_Mode_Circular;
-  DMA_InitStructure.DMA_Priority = DMA_Priority_High;
-  DMA_InitStructure.DMA_M2M = DMA_M2M_Disable;
-  DMA_Init(config.dma_ch1, &DMA_InitStructure);
-  DMA_InitStructure.DMA_PeripheralBaseAddr = (uint32_t)&(config.timx->CCR2);
-  DMA_InitStructure.DMA_MemoryBaseAddr = (uint32_t)config.h_vp;
-  DMA_InitStructure.DMA_DIR = DMA_DIR_PeripheralSRC;
-  DMA_InitStructure.DMA_BufferSize = BUFF_LEN;
-  DMA_InitStructure.DMA_PeripheralInc = DMA_PeripheralInc_Disable;
-  DMA_InitStructure.DMA_MemoryInc = DMA_MemoryInc_Enable;
-  DMA_InitStructure.DMA_PeripheralDataSize = DMA_PeripheralDataSize_HalfWord;
-  DMA_InitStructure.DMA_MemoryDataSize = DMA_MemoryDataSize_HalfWord;
-  DMA_InitStructure.DMA_Mode = DMA_Mode_Circular;
-  DMA_InitStructure.DMA_Priority = DMA_Priority_High;
-  DMA_InitStructure.DMA_M2M = DMA_M2M_Disable;
-  DMA_Init(config.dma_ch2, &DMA_InitStructure);
+  // Setup DMA only if used (buf_update_idx_ptr is set to 0 if interrupt not used)
+  if (config.buf_update_idx_ptr==0){
+    RCC_AHBPeriphClockCmd(RCC_AHBPeriph_DMA1, ENABLE);
+    DMA_DeInit(config.dma_ch1);
+    DMA_DeInit(config.dma_ch2);
+    DMA_InitStructure.DMA_PeripheralBaseAddr = (uint32_t)&(config.timx->CCR1);
+    DMA_InitStructure.DMA_MemoryBaseAddr = (uint32_t)config.p_vp;
+    DMA_InitStructure.DMA_DIR = DMA_DIR_PeripheralSRC;
+    DMA_InitStructure.DMA_BufferSize = BUFF_LEN;
+    DMA_InitStructure.DMA_PeripheralInc = DMA_PeripheralInc_Disable;
+    DMA_InitStructure.DMA_MemoryInc = DMA_MemoryInc_Enable;
+    DMA_InitStructure.DMA_PeripheralDataSize = DMA_PeripheralDataSize_HalfWord;
+    DMA_InitStructure.DMA_MemoryDataSize = DMA_MemoryDataSize_HalfWord;
+    DMA_InitStructure.DMA_Mode = DMA_Mode_Circular;
+    DMA_InitStructure.DMA_Priority = DMA_Priority_High;
+    DMA_InitStructure.DMA_M2M = DMA_M2M_Disable;
+    DMA_Init(config.dma_ch1, &DMA_InitStructure);
+    DMA_InitStructure.DMA_PeripheralBaseAddr = (uint32_t)&(config.timx->CCR2);
+    DMA_InitStructure.DMA_MemoryBaseAddr = (uint32_t)config.h_vp;
+    DMA_InitStructure.DMA_DIR = DMA_DIR_PeripheralSRC;
+    DMA_InitStructure.DMA_BufferSize = BUFF_LEN;
+    DMA_InitStructure.DMA_PeripheralInc = DMA_PeripheralInc_Disable;
+    DMA_InitStructure.DMA_MemoryInc = DMA_MemoryInc_Enable;
+    DMA_InitStructure.DMA_PeripheralDataSize = DMA_PeripheralDataSize_HalfWord;
+    DMA_InitStructure.DMA_MemoryDataSize = DMA_MemoryDataSize_HalfWord;
+    DMA_InitStructure.DMA_Mode = DMA_Mode_Circular;
+    DMA_InitStructure.DMA_Priority = DMA_Priority_High;
+    DMA_InitStructure.DMA_M2M = DMA_M2M_Disable;
+    DMA_Init(config.dma_ch2, &DMA_InitStructure);
 
-  DMA_Cmd(config.dma_ch1, ENABLE);
-  DMA_Cmd(config.dma_ch2, ENABLE);
+    DMA_Cmd(config.dma_ch1, ENABLE);
+    DMA_Cmd(config.dma_ch2, ENABLE);
+  }
 
   if (config.timx_rcc == RCC_APB2Periph_TIM1){
     RCC_APB2PeriphClockCmd(config.timx_rcc, ENABLE);
@@ -141,10 +149,17 @@ void init_timer_capture(TIM_PWM_CAPTURE_t &config)
   TIM_SelectSlaveMode(config.timx, TIM_SlaveMode_Reset);
   TIM_SelectMasterSlaveMode(config.timx, TIM_MasterSlaveMode_Enable);
 
-  TIM_DMACmd(config.timx, TIM_DMA_CC1, ENABLE);
-  TIM_DMACmd(config.timx, TIM_DMA_CC2, ENABLE);
+  if (config.buf_update_idx_ptr==0){
+    TIM_DMACmd(config.timx, TIM_DMA_CC1, ENABLE);
+    TIM_DMACmd(config.timx, TIM_DMA_CC2, ENABLE);
+  }
 
   TIM_Cmd(config.timx, ENABLE);
+
+  // Setup ISR only if DMA not used
+  if(config.buf_update_idx_ptr>0){
+    TIM_ITConfig(config.timx, TIM_IT_CC1, ENABLE);
+  }
 
   config._center *= config.resolution;
   config._sync_min *= config.resolution;
@@ -152,12 +167,70 @@ void init_timer_capture(TIM_PWM_CAPTURE_t &config)
   config._sweep_max *= config.resolution;
 }
 
+#ifdef __cplusplus
+ extern "C" {
+#endif
+
+void TIM1_CC_IRQHandler(void)
+{
+  TIM_ClearITPendingBit(TIM1, TIM_IT_CC1);
+  timer1_capture_values_period[timer_1_buf_idx] = TIM_GetCapture1(TIM1);
+  timer1_capture_values_high[timer_1_buf_idx] = TIM_GetCapture2(TIM1);
+  timer_1_buf_idx++;
+  if (timer_1_buf_idx>=BUFF_LEN){
+    timer_1_buf_idx = 0;
+  }
+}
+
+void TIM2_IRQHandler(void)
+{
+  TIM_ClearITPendingBit(TIM2, TIM_IT_CC1);
+  timer2_capture_values_period[timer_2_buf_idx] = TIM_GetCapture1(TIM2);
+  timer2_capture_values_high[timer_2_buf_idx] = TIM_GetCapture2(TIM2);
+  timer_2_buf_idx++;
+  if (timer_2_buf_idx>=BUFF_LEN){
+    timer_2_buf_idx = 0;
+  }
+}
+
+void TIM3_IRQHandler(void)
+{
+  TIM_ClearITPendingBit(TIM3, TIM_IT_CC1);
+  timer3_capture_values_period[timer_3_buf_idx] = TIM_GetCapture1(TIM3);
+  timer3_capture_values_high[timer_3_buf_idx] = TIM_GetCapture2(TIM3);
+  timer_3_buf_idx++;
+  if (timer_3_buf_idx>=BUFF_LEN){
+    timer_3_buf_idx = 0;
+  }
+}
+
+void TIM4_IRQHandler(void)
+{
+  TIM_ClearITPendingBit(TIM4, TIM_IT_CC1);
+  timer4_capture_values_period[timer_4_buf_idx] = TIM_GetCapture1(TIM4);
+  timer4_capture_values_high[timer_4_buf_idx] = TIM_GetCapture2(TIM4);
+  timer_4_buf_idx++;
+  if (timer_4_buf_idx>=BUFF_LEN){
+    timer_4_buf_idx = 0;
+  }
+}
+
+#ifdef __cplusplus
+}
+#endif
+
 void process_sensor_data(TIM_PWM_CAPTURE_t &config)
 {
   int16_t idx_h,idx_p;
-  idx_p = BUFF_LEN-DMA_GetCurrDataCounter(config.dma_ch1)-config.buf_idx;
+  if(config.buf_update_idx_ptr>0){ // if interrupt used
+    idx_p = *(config.buf_update_idx_ptr)-config.buf_idx;
+    idx_h = *(config.buf_update_idx_ptr)-config.buf_idx;
+  }
+  else{ // if DMA used
+    idx_p = BUFF_LEN-DMA_GetCurrDataCounter(config.dma_ch1)-config.buf_idx;
+    idx_h = BUFF_LEN-DMA_GetCurrDataCounter(config.dma_ch2)-config.buf_idx;
+  }
   idx_p = idx_p>=0?idx_p:BUFF_LEN+idx_p;
-  idx_h = BUFF_LEN-DMA_GetCurrDataCounter(config.dma_ch2)-config.buf_idx;
   idx_h = idx_h>=0?idx_h:BUFF_LEN+idx_h;
   if (idx_h>1 & idx_p>1){
     // status_led_activity();
@@ -174,10 +247,20 @@ void process_sensor_data(TIM_PWM_CAPTURE_t &config)
         int16_t pos = config._center-(config.p_vp)[config.buf_idx]; // Relative angle from center (4000uS)
         if (pos<config._center & pos>-config._center){ // Double check if position is within range
           if (config.sync_pulse_code%2==0){ // This was a X sweep
-            config.x = pos;
+            if (config.buf_update_idx_ptr>0){
+              config.x = pos;
+            }
+            else{ //DMA generates reverse(x<->y) signal! Why?
+              config.y = -pos;
+            }
           }
           else{  // This was a Y sweep
-            config.y = pos;
+            if (config.buf_update_idx_ptr>0){
+              config.y = pos;
+            }
+            else{ //DMA generates reverse(x<->y) signal! Why?
+              config.x = -pos;
+            }
           }
         }
         config.buf_idx = next_idx+1; // Processed a sync and a sweep pulse
@@ -288,7 +371,7 @@ void process_ootx_frame(OOTX_DATA_t &ootx, TIM_PWM_CAPTURE_t &data)
   data.sync_pulse_code=0xF;
 }
 
-void transmit(uint16_t x1,uint16_t y1,uint16_t x2,uint16_t y2,uint16_t x3,uint16_t y3)
+void transmit(uint16_t x1,uint16_t y1,uint16_t x2,uint16_t y2,uint16_t x3,uint16_t y3,uint16_t x4,uint16_t y4)
 {
   const char buf[] = {
     '>',
@@ -304,6 +387,10 @@ void transmit(uint16_t x1,uint16_t y1,uint16_t x2,uint16_t y2,uint16_t x3,uint16
     (uint8_t) (x3 & 0xff),
     (uint8_t) ((y3>>8) & 0xff),
     (uint8_t) (y3 & 0xff),
+    (uint8_t) ((x4>>8) & 0xff),
+    (uint8_t) (x4 & 0xff),
+    (uint8_t) ((y4>>8) & 0xff),
+    (uint8_t) (y4 & 0xff),
     '\r',
     '\n'
   };
@@ -318,8 +405,8 @@ int main()
 {
   char *formatted_str = (char*)malloc(128 * sizeof(char));
   uint16_t i=0;
-  uint8_t _debug=0;
-  uint8_t _serial_update=1;
+  uint8_t _debug=1;
+  uint8_t _serial_update=0;
 
   uart_init(115200,0);
   status_led_reset();
@@ -339,9 +426,10 @@ int main()
     ._sync_min = 50,
     ._sync_max = 150,
     ._sweep_max = 40,
-    .p_vp = timer_capture_values_period,
-    .h_vp = timer_capture_values_high,
-    .buf_idx = 0
+    .p_vp = timer1_capture_values_period,
+    .h_vp = timer1_capture_values_high,
+    .buf_idx = 0,
+    .buf_update_idx_ptr = &timer_1_buf_idx
   };
 
   TIM_PWM_CAPTURE_t configuration_sensor_2 = {
@@ -358,9 +446,10 @@ int main()
     ._sync_min = 50,
     ._sync_max = 150,
     ._sweep_max = 40,
-    .p_vp = timer_capture_values_period_2,
-    .h_vp = timer_capture_values_high_2,
-    .buf_idx = 0
+    .p_vp = timer4_capture_values_period,
+    .h_vp = timer4_capture_values_high,
+    .buf_idx = 0,
+    .buf_update_idx_ptr = &timer_4_buf_idx
   };
 
   TIM_PWM_CAPTURE_t configuration_sensor_3 = {
@@ -377,9 +466,30 @@ int main()
     ._sync_min = 50,
     ._sync_max = 150,
     ._sweep_max = 40,
-    .p_vp = timer_capture_values_period_3,
-    .h_vp = timer_capture_values_high_3,
-    .buf_idx = 0
+    .p_vp = timer2_capture_values_period,
+    .h_vp = timer2_capture_values_high,
+    .buf_idx = 0,
+    .buf_update_idx_ptr = &timer_2_buf_idx
+  };
+
+  TIM_PWM_CAPTURE_t configuration_sensor_4 = {
+    .nvic_irqchannel = TIM3_IRQn,
+    .dma_ch1 = DMA1_Channel6,
+    .dma_ch2 = 0, // No connection
+    .timx = TIM3,
+    .timx_rcc = RCC_APB1Periph_TIM3,
+    .gpio_rcc = RCC_APB2Periph_GPIOA,
+    .gpio_pin = GPIO_Pin_6,
+    .gpio_port = GPIOA,
+    .resolution = 4,
+    ._center = 4000,
+    ._sync_min = 50,
+    ._sync_max = 150,
+    ._sweep_max = 40,
+    .p_vp = timer3_capture_values_period,
+    .h_vp = timer3_capture_values_high,
+    .buf_idx = 0,
+    .buf_update_idx_ptr = &timer_3_buf_idx
   };
 
   OOTX_DATA_t ootx_data = {
@@ -393,29 +503,33 @@ int main()
   init_timer_capture(configuration_sensor_1);
   init_timer_capture(configuration_sensor_2);
   init_timer_capture(configuration_sensor_3);
+  init_timer_capture(configuration_sensor_4);
 
   while(1){
-    status_led_set();
     process_sensor_data(configuration_sensor_1);
     process_sensor_data(configuration_sensor_2);
     process_sensor_data(configuration_sensor_3);
-    process_ootx_frame(ootx_data,configuration_sensor_1);
+    process_sensor_data(configuration_sensor_4);
+    // process_ootx_frame(ootx_data,configuration_sensor_1);
     if(available()){
       if(uart_getc()=='#'){
+        status_led_set();
         transmit(
           configuration_sensor_1.x,
           configuration_sensor_1.y,
           configuration_sensor_2.x,
           configuration_sensor_2.y,
           configuration_sensor_3.x,
-          configuration_sensor_3.y
+          configuration_sensor_3.y,
+          configuration_sensor_4.x,
+          configuration_sensor_4.y
         );
+        status_led_reset();
       }
     }
     else{
       // delay(1);
     }
-    status_led_reset();
 
 
 
@@ -458,6 +572,35 @@ int main()
       // uart_send('\t');
       // uart_send_int(_az);
       // uart_sends("\r\n\n\n");
+    }
+    if (_debug & i%50==0){
+      uart_send_int(configuration_sensor_1.x);
+      uart_send(',');
+      uart_send_int(configuration_sensor_1.y);
+      uart_send('\t');
+      uart_send_int(configuration_sensor_2.x);
+      uart_send(',');
+      uart_send_int(configuration_sensor_2.y);
+      uart_send('\t');
+      uart_send_int(configuration_sensor_3.x);
+      uart_send(',');
+      uart_send_int(configuration_sensor_3.y);
+      uart_send('\t');
+      uart_send_int(configuration_sensor_4.x);
+      uart_send(',');
+      uart_send_int(configuration_sensor_4.y);
+      // uart_send('\t');
+      // uart_send_uint(configuration_sensor_2.p_vp[0]);
+      // uart_send(',');
+      // uart_send_uint(configuration_sensor_2.h_vp[0]);
+      // uart_send('\t');
+      // uart_send_uint(configuration_sensor_3.p_vp[0]);
+      // uart_send(',');
+      // uart_send_uint(configuration_sensor_3.h_vp[0]);
+      uart_sends("\r\n");
+    }
+    if (_debug){
+      delay(1);
     }
     i++;
   }

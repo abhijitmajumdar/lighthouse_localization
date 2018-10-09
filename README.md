@@ -82,6 +82,13 @@ This work is largely inspired by others:
 - https://github.com/RuanJG/cotex-m3-project.git
 
 ## Changes
+- interrupt based values seem to be more stable than DMA, 4 channel work without problem
+- changes the global buffers to correspond to the timer associated with them, same goes for indexes(only used when not using DMA)
+- A buffer pointer is added to the TIM_PWM_CAPTURE_t to point to the global buffer index when using interrupts, if not then set to 0(this is checked to configure DMA/Interrupts in input capture)
+- ISR for each timer defined
+- process_sensor_data() is modified to take into account indexing using DMA or global indexes
+- to unify the axes when using DMA, the x and y are flipped and negated. Make sure sign conventions are proper when using this data
+- timer 3 added
 - added a rule in Makefile to upload only without resetting (useful when uploading using a laptop and resetting the STM manually)
 - actually format and proccess the OOTX data now(though not really used in the solver, but available)
 - serial update is performed only when `#` is received, helps sync the processing on the processor end

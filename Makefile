@@ -52,6 +52,7 @@ SOURCE_DIR ?= src
 INCLUDE_DIR ?= include
 COMPILER ?= CPP
 SERIAL_BAUD ?= 115200
+DEBUG ?= false
 
 ifneq ("$(STMLIB)","STM32STD")
 ifneq ("$(STMLIB)","STM32CUBE")
@@ -129,6 +130,9 @@ ifeq ("$(STMLIB)","STM32CUBE")
 	CFLAGS += -I$(CUBE_LIBS)/Drivers/CMSIS/Include
 	CFLAGS += -I$(CUBE_LIBS)/Drivers/CMSIS/Device/ST/STM32F1xx/Include
 	CFLAGS += -DSTM32CUBE
+endif
+ifeq ("$(DEBUG)","true")
+	CFLAGS += -DDEBUG_PRINT
 endif
 CFLAGS += -DDELAY_TYPE_NOP
 

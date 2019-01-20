@@ -404,9 +404,7 @@ void transmit(uint16_t x1,uint16_t y1,uint16_t x2,uint16_t y2,uint16_t x3,uint16
 int main()
 {
   char *formatted_str = (char*)malloc(128 * sizeof(char));
-  uint16_t i=0;
-  uint8_t _debug=1;
-  uint8_t _serial_update=0;
+  uint16_t i=0; // Used for debugging
 
   uart_init(115200,0);
   status_led_reset();
@@ -533,8 +531,9 @@ int main()
 
 
 
+#ifdef DEBUG_PRINT
     /*  _DEBUG stuff */
-    if(_debug & ootx_data.valid){
+    if(ootx_data.valid){
       uart_send('#');
       uart_send_int(ootx_data.ax);
       uart_send(',');
@@ -545,7 +544,7 @@ int main()
       ootx_data.valid = 0;
     }
 
-    if (_debug & ootx_data.state==PROCESS_FRAME){
+    if (ootx_data.state==PROCESS_FRAME){
       for(int _l=0;_l<ootx_data.buf_index;_l++){
         // ootx_data.buf[_l] = ((ootx_data.buf[_l]<<8)&0xff00)|((ootx_data.buf[_l]>>8)&0x00ff);
         uart_send_uint(_l);
@@ -573,7 +572,7 @@ int main()
       // uart_send_int(_az);
       // uart_sends("\r\n\n\n");
     }
-    if (_debug & i%50==0){
+    if (i%50==0){
       uart_send_int(configuration_sensor_1.x);
       uart_send(',');
       uart_send_int(configuration_sensor_1.y);
@@ -599,9 +598,8 @@ int main()
       // uart_send_uint(configuration_sensor_3.h_vp[0]);
       uart_sends("\r\n");
     }
-    if (_debug){
-      delay(1);
-    }
+    delay(1);
     i++;
+#endif //DEBUG_PRINT
   }
 }

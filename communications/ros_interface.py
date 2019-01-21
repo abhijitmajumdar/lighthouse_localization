@@ -4,9 +4,13 @@ from geometry_msgs.msg import PoseStamped
 
 class ROSInterface:
     def __init__(self):
-        rospy.init_node('lighthouse_localization', anonymous=True)
+        rospy.init_node('lighthouse_localization', anonymous=True, disable_signals=True)
         self.br = tf.TransformBroadcaster()
         self.pose_publisher = rospy.Publisher('pose', PoseStamped, queue_size=1)
+
+    def __del__(self):
+        if self.is_alive()==True:
+            rospy.signal_shutdown("Program Interrupted")
 
     def publish_transform(self, T, src_frame, dest_frame, t=None):
         Q = tf.transformations.quaternion_from_matrix(T)

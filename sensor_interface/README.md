@@ -4,7 +4,7 @@ This repo consists of mainly a Makefile which is oriented to be used to compile 
 The compiler arguments are configured towards programming for the STM32F103C8. Why? This chip is commonly available for very low cost on different form of development boards (ex: `bluepill`)(see https://wiki.stm32duino.com/index.php?title=STM32F103_boards), and it is also supported by the Arduino IDE. This project is useful if you do not want to use commercial IDEs (most of which restrict code size) nor the Arduino IDE, and enables compiling and loading custom program onto the microcontroller entirely through the terminal.
 
 ## **!!!!**
-This branch assumes a STM32F103 board is connected to a Nano Pi over UART1(A9,A10) on the STM and S1(RX1,TX1) on the NPi. There are also connections between Reset(RST),BOOT0 on STM to 203,363 on NPi respectively. As a result the make file called a separately compiled program to reset the device or put it into bootloading mode.
+This branch assumes a STM32F103 board is connected to a NanoPi Duo over UART1(A9,A10) on the STM and S1(RX1,TX1) on the NPi. There are also connections between Reset(RST),BOOT0 on STM to 203,363 on NPi respectively. As a result the make file called a separately compiled program to reset the device or put it into bootloading mode. For pin information on the NanoPi please refer http://wiki.friendlyarm.com/wiki/index.php/NanoPi_Duo. For pin information on the sensor interface board please refer board layout and schematic in the `sensor_interface_board` directory
 
 
 ## Requirements

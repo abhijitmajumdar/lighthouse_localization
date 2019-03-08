@@ -22,7 +22,6 @@ class ROSInterface:
 
     def publish_pose(self,T, frame, t=None):
         Q = tf.transformations.quaternion_from_matrix(T)
-        # Q = tf.transformations.quaternion_from_euler(0.0,0.0,0.0)
         p = PoseStamped()
         p.header.stamp = rospy.Time.now() if t is None else t
         p.header.frame_id = frame

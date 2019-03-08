@@ -1,0 +1,15 @@
+<launch>
+  <arg name="port" value="/dev/ttyS1" />
+  <arg name="ekf" value="False" />
+  <arg name="num_sensors" value="4" />
+  <arg name="num_filter" value="10" />
+  <arg name="num_init_itr" value="100" />
+
+  <node name="locate" pkg="lighthouse_localization_ros" type="run_ros.py" >
+    <param name="port" value="$(arg port)" />
+    <param name="ekf" value="$(arg ekf)" />
+    <param name="num_sensors" value="$(arg num_sensors)" />
+    <param name="num_filter" value="$(arg num_filter)" />
+    <param name="num_init_itr" value="$(arg num_init_itr)" />
+  </node>
+</launch>
